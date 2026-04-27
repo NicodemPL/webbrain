@@ -1,191 +1,140 @@
-# WebBrain
+# WebBrain Codex Bridge
 
-Open-source AI browser agent for Chrome and Firefox. Chat with any web page, automate browser tasks, and run multi-step agent workflows — powered by your choice of LLM.
+This is a hardened fork of [WebBrain](https://github.com/esokullu/webbrain) that
+adds a local Codex/ChatGPT OAuth bridge for the Chrome extension.
 
-## Features
+The goal is simple: use WebBrain as a live Chrome browser agent while routing LLM
+planning/tool decisions through local Codex tooling instead of a hosted WebBrain
+Cloud account or separate OpenAI API key.
 
-- **Page Reading** — Extracts text, links, forms, tables, and interactive elements from any page
-- **Browser Actions** — Click, type, scroll, navigate, and interact with page elements
-- **Ask / Act Modes** — Read-only mode by default, full agent mode with confirmation
-- **Multi-Step Agent** — Autonomous task execution with tool-use loops (configurable, default 25 steps)
-- **Continue from Limit** — When the agent hits the step limit, click Continue to keep going
-- **Multi-Provider LLM** — Supports local and cloud models:
-  - **llama.cpp** (local, default) — No API key needed
-  - **OpenAI** (GPT-4o, etc.)
-  - **OpenRouter** (access 100+ models)
-  - **Anthropic Claude** (native API)
-- **Side Panel UI** — Clean chat interface that lives alongside your browsing
-- **Per-Tab Conversations** — Each tab has its own chat history
-- **Streaming** — Real-time token streaming from all providers
-- **Smart Context** — Automatic context trimming, tool result limits, and emergency overflow recovery
-- **Copy Support** — Copy buttons on code blocks and full messages
-- **Page Inspection Banner** — Visual indicator when the agent is interacting with the page
-- **Stop Button** — Abort the agent mid-execution at any time
+## What This Fork Changes
+
+- Adds a local OpenAI-compatible bridge at `http://127.0.0.1:1455/v1`.
+- Adds a default `Codex Local Bridge` provider for the Chrome extension.
+- Supports a faster `acpx codex` backend with persistent ACP sessions.
+- Keeps `codex exec` as a conservative fallback, especially for image/screenshot turns.
+- Disables the WebBrain Cloud sign-in path in the Chrome settings UI.
+- Removes the default WebBrain Cloud provider configuration.
+- Narrows Chrome extension CSP network access from wildcard `connect-src *`.
+- Removes redundant `http://*/*` host permission.
+
+Most upstream WebBrain functionality is otherwise preserved: Ask/Act modes, page
+reading, browser actions, multi-step tool loops, screenshot fallback, traces, and
+multi-provider support.
 
 ## Quick Start
 
-### Chrome
+Install the local bridge dependencies:
 
 ```bash
-git clone https://github.com/esokullu/webbrain.git
+npm install -g acpx
 ```
 
-1. Open Chrome → `chrome://extensions/`
-2. Enable **Developer mode** (top right)
-3. Click **Load unpacked** → select the `webbrain` folder
-
-### Firefox
+Make sure Codex is already authenticated on your machine:
 
 ```bash
-git clone https://github.com/esokullu/webbrain.git
+codex --version
+acpx codex sessions ensure
 ```
 
-1. Open Firefox → `about:debugging#/runtime/this-firefox`
-2. Click **Load Temporary Add-on**
-3. Navigate to `src/firefox/` and select `manifest.json`
-
-> **Note:** Temporary add-ons are removed when Firefox restarts. For permanent installation, the extension needs to be signed via [addons.mozilla.org](https://addons.mozilla.org).
-
-### Start a local LLM (default)
+Start the bridge from the Chrome extension folder:
 
 ```bash
-# Using llama.cpp
-llama-server -m your-model.gguf --port 8080
-
-# Or using Ollama (OpenAI-compatible)
-ollama serve
-# Then set base URL to http://localhost:11434/v1 in settings
+cd src/chrome
+WEBBRAIN_CODEX_BACKEND=acpx WEBBRAIN_CODEX_VERBOSE=1 node scripts/codex-bridge.mjs
 ```
 
-### Use it
+Load the Chrome extension:
 
-Click the WebBrain icon → the side panel opens. Type a message like:
+1. Open `chrome://extensions/`.
+2. Enable Developer mode.
+3. Click Load unpacked.
+4. Select `src/chrome`.
 
-- "Summarize this page"
-- "Find all links about pricing"
-- "Fill in the search box with 'AI agents' and click Search"
-- "Navigate to github.com and find trending repositories"
+Recommended WebBrain settings:
 
-## Configuration
+```text
+Provider / Codex Local Bridge
+Base URL: http://127.0.0.1:1455/v1
+Model:    gpt-5.3-codex-spark/low
 
-Click the gear icon or go to the extension's Options page to configure:
-
-**Display Settings:**
-- Verbose Mode — Show full tool call JSON (off by default)
-- Screenshot Fallback — Use screenshots when DOM reading fails
-- Max Agent Steps — Configurable step limit (5-50, default 25)
-
-**Providers:**
-
-| Provider | Base URL | API Key |
-|----------|----------|---------|
-| llama.cpp | `http://localhost:8080` | Not needed |
-| OpenAI | `https://api.openai.com/v1` | Required |
-| OpenRouter | `https://openrouter.ai/api/v1` | Required |
-| Anthropic | `https://api.anthropic.com` | Required |
-
-## Architecture
-
-```
-src/chrome/                        src/firefox/
-├── manifest.json (MV3)            ├── manifest.json (MV2)
-├── src/                           ├── src/
-│   ├── background.js              │   ├── background.js (+ background.html)
-│   ├── agent/                     │   ├── agent/
-│   ├── content/                   │   ├── content/
-│   ├── providers/                 │   ├── providers/
-│   ├── network/                   │   ├── network/
-│   ├── trace/                     │   ├── trace/
-│   ├── ui/                        │   └── ui/
-│   └── offscreen/                 ├── styles/
-├── styles/                        ├── icons/
-└── icons/                         └── LICENSE
-
-web/
-├── index.html
-├── privacy.html
-└── vercel.json
+Vision
+Base URL: http://127.0.0.1:1455/v1
+Model:    gpt-5.4-mini/low
+API key:  leave empty
 ```
 
-Key difference: Chrome uses Manifest V3 (service worker, `chrome.scripting`, `sidePanel` API), Firefox uses Manifest V2 (background page, `browser.tabs.executeScript`, `sidebar_action`).
+## Bridge Backends
 
-## Agent Tools
+The bridge is controlled with environment variables:
 
-| Tool | Ask Mode | Act Mode | Description |
-|------|----------|----------|-------------|
-| `read_page` | Yes | Yes | Extract page text, links, forms |
-| `screenshot` | Yes | Yes | Capture visible tab |
-| `get_interactive_elements` | Yes | Yes | List all clickable/interactive elements |
-| `scroll` | Yes | Yes | Scroll the page |
-| `extract_data` | Yes | Yes | Extract tables, headings, images |
-| `get_selection` | Yes | Yes | Get highlighted text |
-| `click` | No | Yes | Click elements by selector, index, or coordinates |
-| `type_text` | No | Yes | Type into input fields |
-| `navigate` | No | Yes | Go to a URL |
-| `wait_for_element` | No | Yes | Wait for a selector to appear |
-| `execute_js` | No | Yes | Run custom JavaScript |
-| `new_tab` | No | Yes | Open a new tab |
-| `fetch_url` | Yes | Yes | Fetch a URL from the background with the user's cookies. Best for JSON APIs, READMEs, plain HTML. |
-| `research_url` | Yes | Yes | Open a URL in a hidden tab, wait for JS rendering, return main content. Best for SPAs. |
-| `list_downloads` | Yes | Yes | List recent downloads with status and source URLs. |
-| `read_downloaded_file` | No | Yes | Re-fetch a downloaded file's content (text or base64). |
-| `download_file` | No | Yes | Download a single file from a URL. |
-| `download_files` | No | Yes | Download multiple files in parallel (max 3 concurrent). |
-| `download_resource_from_page` | No | Yes | Download an `<img>`/`<video>`/blob URL from the current page. |
-| `iframe_read` / `iframe_click` / `iframe_type` | No | Yes | Read/click/type inside cross-origin iframes (Stripe, embedded forms). |
-| `done` | Yes | Yes | Signal task completion |
-
-## Slash Commands
-
-WebBrain accepts a small set of slash commands as the first thing on a line in the input box:
-
-| Command | What it does |
-|---------|--------------|
-| `/allow-api` | **Per-conversation API mutation override.** By default WebBrain refuses to use API endpoints (POST/PUT/PATCH/DELETE via `fetch_url` or `execute_js`) for any action that creates, modifies, deletes, or sends — it always goes through the visible UI of the current page so you can see what's happening. Type `/allow-api` (optionally followed by a task description) to lift that restriction *for the current conversation only*. The agent will still prefer UI when UI works, but may fall back to API mutations when UI is genuinely failing or unworkable. A sticky badge appears above the input area while the override is active. The flag clears when you reset the conversation. |
-
-The default UI-first rule exists because API actions are invisible (you don't see what's being sent), often require separate auth tokens you may not have configured, and can have a much larger blast radius than a visible mis-click. Only use `/allow-api` when you've decided you want that tradeoff for a specific job.
-
-## Known Issues
-
-- **Firefox is meaningfully weaker than Chrome.** Firefox has no equivalent to Chrome DevTools Protocol via `chrome.debugger`, so several Chrome-only features are missing in the Firefox build:
-  - Click/type goes through the content-script path (`document.querySelector` + `el.click()`) instead of CDP `Input.dispatchMouseEvent`. This means **no shadow-DOM piercing**, **no real trusted mouse events** (some React/Vue handlers won't fire), **no closed-shadow-root traversal**, and **no `resolveSelector` retry budget**.
-  - **No SPA-navigation-aware retry extension.**
-  - **No conversation persistence** across background restarts.
-  - **No CDP screenshots.** Auto-screenshot uses `tabs.captureVisibleTab` instead, which works for active tabs only and at slightly lower quality.
-  - **No closed shadow root support** for read/extract tools.
-  - Site adapters, vision detection, loop detection, and the auto-screenshot loop *are* mirrored to Firefox.
-- **SPA navigation detection in Firefox.** Some single-page applications may not trigger content-script re-injection after client-side navigation.
-- **Firefox temporary add-on** — Firefox requires the extension to be loaded as a temporary add-on during development, which is removed on restart.
-
-## What's New in 4.2.0 (from 1.x)
-
-- **Safety-first API behavior** via `/allow-api` per-conversation override (UI-first for mutations by default)
-- **Cross-origin iframe interaction tools** (`iframe_read`, `iframe_click`, `iframe_type`) for embedded forms and widgets
-- **Network research tools** (`fetch_url`, `research_url`) for fast read-only data retrieval
-- **Download workflow tools** (`download_file`, `download_files`, `list_downloads`, `read_downloaded_file`)
-- **Trace viewer and quality-of-life upgrades** including step-limit continuation and stronger context controls
-
-## Roadmap
-
-- [ ] **Conversation export/import** — Save and load chat histories
-- [ ] **Custom tool definitions** — User-defined tools via settings
-- [ ] **Keyboard shortcuts** — Hotkeys for opening panel, sending messages, switching modes
-- [ ] **Context menu integration** — Right-click → "Ask WebBrain about this"
-- [X] **Screenshot/vision tool** — Send screenshots to multimodal models for visual understanding
-- [X] **Chrome Web Store / Firefox AMO** — Official store listings
-
-## Adding a New Provider
-
-1. Create a new class extending `BaseLLMProvider` in `src/providers/`
-2. Implement `chat()` and optionally `chatStream()`
-3. Register it in `src/providers/manager.js`
-
-All providers normalize to a common response format:
-```js
-{ content: string, toolCalls: Array|null, usage: Object|null }
+```bash
+WEBBRAIN_CODEX_BACKEND=acpx
 ```
 
+Uses `acpx codex` with a persistent ACP session. This is usually faster for
+text/tool-planning turns.
+
+```bash
+WEBBRAIN_CODEX_BACKEND=cli
+```
+
+Uses `codex exec` directly. This is slower, but conservative and useful as a
+fallback.
+
+Useful options:
+
+```bash
+WEBBRAIN_CODEX_VERBOSE=1
+WEBBRAIN_CODEX_PORT=1455
+WEBBRAIN_CODEX_ACPX_MODEL=gpt-5.3-codex-spark/low
+WEBBRAIN_CODEX_ACPX_TIMEOUT=60
+WEBBRAIN_CODEX_ACPX_FALLBACK_TO_CLI=1
+WEBBRAIN_CODEX_TIMEOUT_MS=180000
+```
+
+## Safety Notes
+
+This fork is intended for source-loaded local use, ideally in a dedicated Chrome
+profile.
+
+WebBrain remains powerful by design. In Act mode it can read pages, inspect DOM
+and accessibility data, take screenshots, click, type, navigate, interact with
+frames, and use Chrome extension APIs. Do not run it unsupervised on important
+accounts.
+
+See [src/chrome/SAFETY_AUDIT.md](src/chrome/SAFETY_AUDIT.md) for the current
+safety notes.
+
+## What Is Not Included
+
+- No Codex tokens are copied into the extension.
+- No local Codex auth files are read by the Chrome extension.
+- No hosted WebBrain Cloud login flow is used by default.
+- No private local paths or credentials are required in the repository.
+
+## Development Checks
+
+```bash
+node --check src/chrome/scripts/codex-bridge.mjs
+node --check src/chrome/src/providers/manager.js
+node --check src/chrome/src/ui/settings.js
+jq empty src/chrome/manifest.json
+```
+
+Bridge health check:
+
+```bash
+curl http://127.0.0.1:1455/health
+```
+
+## Upstream
+
+Original project: [esokullu/webbrain](https://github.com/esokullu/webbrain)
+
+This fork currently focuses on the Chrome extension. Firefox and website files
+may still reflect upstream WebBrain behavior unless explicitly changed.
 
 ## License
 
-MIT — built by [Emre Sokullu](https://emresokullu.com)
+MIT. Original WebBrain was built by Emre Sokullu.

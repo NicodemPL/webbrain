@@ -2,3 +2,16 @@
 .DS_Store
 node_modules/
 test/anonymous/.test-profile/
+
+# Local secrets and runtime artifacts
+.env
+.env.*
+!.env.example
+*.local
+*.log
+auth.json
+secrets.json
+*.pem
+*.key
+*.p12
+*.mobileprovision

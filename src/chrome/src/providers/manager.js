@@ -16,8 +16,13 @@ export class ProviderManager {
    */
   async load() {
     const data = await chrome.storage.local.get(['providers', 'activeProvider']);
-    const configs = data.providers || this._defaultConfigs();
-    this.activeProviderId = data.activeProvider || 'llamacpp';
+    const defaults = this._defaultConfigs();
+    const configs = { ...defaults, ...(data.providers || {}) };
+    delete configs.webbrain;
+    this.activeProviderId = data.activeProvider === 'webbrain'
+      ? 'codex'
+      : (data.activeProvider || 'codex');
+    if (!configs[this.activeProviderId]) this.activeProviderId = 'codex';
 
     this.providers.clear();
     for (const [id, config] of Object.entries(configs)) {
@@ -95,14 +100,16 @@ export class ProviderManager {
         apiKey: '',
         enabled: false,
       },
-      webbrain: {
+      codex: {
         type: 'openai',
-        label: 'WebBrain Cloud',
-        providerName: 'webbrain',
-        baseUrl: 'https://auth.webbrain.one/v1',
-        model: 'openai/gpt-4o',
+        label: 'Codex Local Bridge',
+        providerName: 'codex',
+        baseUrl: 'http://127.0.0.1:1455/v1',
+        model: 'gpt-5.3-codex-spark/low',
         apiKey: '',
-        enabled: false,
+        supportsVision: false,
+        useCompactPrompt: false,
+        enabled: true,
       },
     };
   }
