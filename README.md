@@ -106,13 +106,6 @@ accounts.
 See [src/chrome/SAFETY_AUDIT.md](src/chrome/SAFETY_AUDIT.md) for the current
 safety notes.
 
-## What Is Not Included
-
-- No Codex tokens are copied into the extension.
-- No local Codex auth files are read by the Chrome extension.
-- No hosted WebBrain Cloud login flow is used by default.
-- No private local paths or credentials are required in the repository.
-
 ## Development Checks
 
 ```bash
